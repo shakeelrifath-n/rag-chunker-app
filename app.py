@@ -13,7 +13,7 @@ st.set_page_config(
 
 # Title and description
 st.title("🔍 RAG Chunking & Embedding Explorer")
-st.markdown("Compare different chunking methods and generate embeddings for text analysis")
+st.markdown("Compare different chunking technique and generate embeddings for text analysis")
 
 # Sidebar for method selection
 st.sidebar.header("Configuration")
