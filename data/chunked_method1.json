@@ -1,8 +1,12 @@
 [
-    "This is the first chunk from method 1. It contains information about cars and their features.",
-    "The second chunk discusses engine specifications and performance metrics for various car models.",
-    "Third chunk covers safety features including airbags, ABS brakes, and stability control systems.",
-    "Fourth chunk explains fuel efficiency ratings and environmental impact of different vehicles.",
-    "Final chunk from method 1 talks about maintenance schedules and warranty information."
+    "Retrieval-Augmented Generation (RAG) is an AI framework that enhances language models by incorporating external knowledge sources. RAG systems retrieve relevant information from databases or documents before generating responses, significantly improving accuracy and reducing hallucinations in AI outputs.",
+    
+    "The retriever component in RAG systems uses dense vector representations to find semantically similar content. Modern retrievers employ transformer-based encoders like BERT or Sentence-BERT to create embeddings that capture contextual meaning rather than just keyword matching.",
+    
+    "Text chunking is a critical preprocessing step in RAG pipelines that determines retrieval quality. Fixed-size chunking divides documents into uniform segments based on character or token counts, ensuring consistent processing but potentially breaking semantic boundaries.",
+    
+    "Vector databases store and index high-dimensional embeddings for efficient similarity search. Popular solutions include FAISS, Pinecone, Weaviate, and Chroma, each offering different trade-offs between speed, accuracy, and scalability for production RAG systems.",
+    
+    "Embedding models convert text into numerical vectors where similar meanings cluster together in vector space. The choice between models like all-MiniLM-L6-v2 (384 dimensions) or text-embedding-ada-002 (1536 dimensions) affects both quality and computational cost."
   ]
   

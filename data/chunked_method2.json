@@ -1,8 +1,12 @@
 [
-    "Method 2 chunk one focuses on vehicle design and aerodynamics for improved performance.",
-    "Second chunk from method 2 examines interior features and passenger comfort systems.",
-    "The third chunk analyzes technology integration including infotainment and connectivity.",
-    "Fourth chunk covers pricing strategies and market positioning for different car segments.",
-    "Method 2 final chunk discusses future trends in automotive industry and electric vehicles."
+    "Large Language Models and Knowledge Integration\n\nRetrieval-Augmented Generation represents a paradigm shift in how AI systems access and utilize knowledge. Unlike traditional language models that rely solely on parametric knowledge stored in neural network weights, RAG systems dynamically retrieve and incorporate external information.\n\nThis hybrid approach addresses key limitations of pure generative models.",
+    
+    "Vector Search and Semantic Retrieval\n\nThe foundation of effective RAG systems lies in sophisticated retrieval mechanisms. Dense retrieval methods use neural encoders to transform queries and documents into high-dimensional vector representations.\n\nThese embeddings capture semantic relationships that enable finding relevant content even when exact keywords don't match.",
+    
+    "Document Processing Strategies\n\nText segmentation significantly impacts RAG performance. Recursive chunking strategies respect document structure by splitting at natural boundaries:\n• Paragraphs (\\n\\n)\n• Sentences (\\n)\n• Phrases (spaces)\n• Characters (last resort)\n\nThis hierarchical approach preserves contextual integrity while meeting size constraints.",
+    
+    "Infrastructure and Scaling Considerations\n\nProduction RAG systems require robust vector storage solutions. Enterprise deployments must consider:\n- Query latency requirements\n- Index update frequencies\n- Multi-tenancy support\n- Metadata filtering capabilities\n\nThe choice between cloud services and self-hosted solutions depends on data sensitivity and cost considerations.",
+    
+    "Model Selection and Performance Optimization\n\nEmbedding model selection involves multiple trade-offs:\n\nAccuracy vs Speed: Larger models provide better semantic understanding but increase latency\nCost vs Quality: Premium models like OpenAI's embeddings offer superior performance at higher costs\nLanguage Support: Multilingual models enable global applications but may sacrifice single-language performance\n\nBenchmarking on domain-specific data is essential for optimal model selection."
   ]
   
