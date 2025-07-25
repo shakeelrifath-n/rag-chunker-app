@@ -6,7 +6,7 @@ import json
 
 # Page configuration
 st.set_page_config(
-    page_title="RAG Chunking & Embedding Explorer",
+    page_title="RAG Chunking & Embedding Explorer by Shakeel",
     page_icon="🔍",
     layout="wide"
 )
