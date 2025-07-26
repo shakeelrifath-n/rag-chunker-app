@@ -3,17 +3,8 @@ import faiss
 import numpy as np
 import json
 from sklearn.metrics import f1_score
-import nltk
-from nltk.tokenize import word_tokenize
-import openai
-import os
+import ssl
 from typing import List, Dict, Tuple
-
-# Download required NLTK data
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
 
 class RAGEvaluator:
     def __init__(self, model_name='all-MiniLM-L6-v2'):
@@ -136,18 +127,34 @@ Expert Answer:"""
             return "Based on the available context: " + " ".join([chunk[:100] + "..." for chunk in context_chunks[:2]])
     
     def calculate_f1_score(self, generated_response: str, reference_answer: str) -> float:
-        """Calculate F1 score between generated and reference answers"""
-        # Tokenize both responses
-        generated_tokens = set(word_tokenize(generated_response.lower()))
-        reference_tokens = set(word_tokenize(reference_answer.lower()))
+        """Calculate F1 score between generated and reference answers - Simplified version without NLTK"""
+        # Simple word tokenization without NLTK (splits on whitespace)
+        generated_tokens = set(generated_response.lower().split())
+        reference_tokens = set(reference_answer.lower().split())
+        
+        # Remove common punctuation
+        punctuation = '.,!?;:"()[]{}\'`~@#$%^&*-_+=|\\/<>'
+        
+        # Clean tokens
+        generated_clean = set()
+        for token in generated_tokens:
+            cleaned = token.strip(punctuation)
+            if cleaned:
+                generated_clean.add(cleaned)
+        
+        reference_clean = set()
+        for token in reference_tokens:
+            cleaned = token.strip(punctuation)
+            if cleaned:
+                reference_clean.add(cleaned)
         
         # Calculate precision and recall
-        if len(generated_tokens) == 0:
+        if len(generated_clean) == 0:
             return 0.0
         
-        intersection = generated_tokens.intersection(reference_tokens)
-        precision = len(intersection) / len(generated_tokens)
-        recall = len(intersection) / len(reference_tokens) if len(reference_tokens) > 0 else 0
+        intersection = generated_clean.intersection(reference_clean)
+        precision = len(intersection) / len(generated_clean)
+        recall = len(intersection) / len(reference_clean) if len(reference_clean) > 0 else 0
         
         # Calculate F1 score
         if precision + recall == 0:
@@ -173,3 +180,8 @@ def create_embeddings(chunks, model_name='all-MiniLM-L6-v2'):
     model = SentenceTransformer(model_name)
     embeddings = model.encode(chunks)
     return embeddings
+
+def save_chunks(chunks, filename):
+    """Save chunks to JSON file"""
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(chunks, f, indent=2)
