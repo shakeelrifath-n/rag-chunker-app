@@ -2,168 +2,170 @@ from sentence_transformers import SentenceTransformer
 import faiss
 import numpy as np
 import json
-from sklearn.metrics import f1_score
-import ssl
-from typing import List, Dict, Tuple
+import time
+from typing import List, Dict, Tuple, Generator
+import streamlit as st
 
-class RAGEvaluator:
+class RealTimeRAGEvaluator:
     def __init__(self, model_name='all-MiniLM-L6-v2'):
         self.embedding_model = SentenceTransformer(model_name)
         self.vector_stores = {}
         self.chunks_data = {}
+        self.processing_stats = {}
         
-    def create_faiss_index(self, chunks: List[str], method_name: str) -> faiss.IndexFlatIP:
-        """Create FAISS index for chunks"""
-        # Generate embeddings
-        embeddings = self.embedding_model.encode(chunks)
-        embeddings = embeddings.astype('float32')
+    def process_document_realtime(self, text: str, method_name: str, 
+                                chunk_size: int = 500, chunk_overlap: int = 50) -> Generator:
+        """Process document in real-time with progress updates"""
+        start_time = time.time()
         
-        # Normalize for cosine similarity
+        # Step 1: Text Analysis
+        yield {"step": "analysis", "status": "Analyzing document...", "progress": 0}
+        doc_stats = {
+            "total_chars": len(text),
+            "total_words": len(text.split()),
+            "estimated_chunks": len(text) // chunk_size
+        }
+        yield {"step": "analysis", "status": "Document analyzed", "progress": 20, "data": doc_stats}
+        
+        # Step 2: Chunking
+        yield {"step": "chunking", "status": f"Applying {method_name} chunking...", "progress": 30}
+        
+        if method_name == "Fixed Size":
+            chunks = self._chunk_fixed_size_realtime(text, chunk_size, chunk_overlap)
+        else:
+            chunks = self._chunk_recursive_realtime(text, chunk_size, chunk_overlap)
+            
+        yield {"step": "chunking", "status": f"Created {len(chunks)} chunks", "progress": 50, "data": chunks}
+        
+        # Step 3: Embedding Generation
+        yield {"step": "embedding", "status": "Generating embeddings...", "progress": 60}
+        
+        embeddings = []
+        for i, chunk in enumerate(chunks):
+            embedding = self.embedding_model.encode([chunk])[0]
+            embeddings.append(embedding)
+            progress = 60 + (30 * (i + 1) / len(chunks))
+            yield {"step": "embedding", "status": f"Processed chunk {i+1}/{len(chunks)}", "progress": progress}
+        
+        embeddings = np.array(embeddings).astype('float32')
+        
+        # Step 4: FAISS Index Creation
+        yield {"step": "indexing", "status": "Creating FAISS index...", "progress": 90}
+        
         faiss.normalize_L2(embeddings)
-        
-        # Create FAISS index
         dimension = embeddings.shape[1]
-        index = faiss.IndexFlatIP(dimension)  # Inner product for cosine similarity
+        index = faiss.IndexFlatIP(dimension)
         index.add(embeddings)
         
-        # Store for later use
+        # Store data
         self.vector_stores[method_name] = index
         self.chunks_data[method_name] = chunks
         
-        return index
+        # Final statistics
+        end_time = time.time()
+        processing_time = end_time - start_time
+        
+        self.processing_stats[method_name] = {
+            "total_time": processing_time,
+            "chunks_created": len(chunks),
+            "embeddings_generated": len(embeddings),
+            "avg_chunk_length": np.mean([len(chunk) for chunk in chunks]),
+            "processing_speed": len(chunks) / processing_time
+        }
+        
+        yield {
+            "step": "complete", 
+            "status": "Processing complete!", 
+            "progress": 100, 
+            "stats": self.processing_stats[method_name]
+        }
     
-    def retrieve_chunks(self, query: str, method_name: str, k: int = 3) -> List[str]:
-        """Retrieve top-k chunks using FAISS"""
+    def _chunk_fixed_size_realtime(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
+        """Fixed size chunking with real-time processing"""
+        chunks = []
+        start = 0
+        
+        while start < len(text):
+            end = start + chunk_size
+            chunk = text[start:end]
+            
+            # Try to break at word boundary
+            if end < len(text) and not text[end].isspace():
+                last_space = chunk.rfind(' ')
+                if last_space > len(chunk) * 0.7:  # Don't break too early
+                    chunk = chunk[:last_space]
+                    end = start + last_space
+            
+            chunks.append(chunk.strip())
+            start = end - chunk_overlap
+            
+        return [chunk for chunk in chunks if len(chunk.strip()) > 10]
+    
+    def _chunk_recursive_realtime(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
+        """Recursive chunking with real-time processing"""
+        # Split by paragraphs first
+        paragraphs = text.split('\n\n')
+        chunks = []
+        current_chunk = ""
+        
+        for paragraph in paragraphs:
+            # If adding this paragraph would exceed chunk size
+            if len(current_chunk) + len(paragraph) > chunk_size and current_chunk:
+                chunks.append(current_chunk.strip())
+                # Start new chunk with overlap
+                overlap_words = current_chunk.split()[-chunk_overlap//10:]  # Approximate word overlap
+                current_chunk = ' '.join(overlap_words) + ' ' + paragraph
+            else:
+                current_chunk += ('\n\n' if current_chunk else '') + paragraph
+        
+        # Add final chunk
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+        
+        return [chunk for chunk in chunks if len(chunk.strip()) > 10]
+    
+    def retrieve_chunks_realtime(self, query: str, method_name: str, k: int = 3) -> Dict:
+        """Real-time retrieval with timing"""
+        start_time = time.time()
+        
         if method_name not in self.vector_stores:
-            return []
+            return {"chunks": [], "retrieval_time": 0, "similarity_scores": []}
         
         # Encode query
         query_embedding = self.embedding_model.encode([query]).astype('float32')
         faiss.normalize_L2(query_embedding)
         
-        # Search
+        # Search with timing
         scores, indices = self.vector_stores[method_name].search(query_embedding, k)
         
-        # Return retrieved chunks
+        # Get results
         retrieved_chunks = [self.chunks_data[method_name][idx] for idx in indices[0]]
-        return retrieved_chunks
-    
-    def generate_response(self, query: str, context_chunks: List[str], 
-                         prompting_technique: str = "zero_shot") -> str:
-        """Generate response using different prompting techniques"""
+        retrieval_time = time.time() - start_time
         
-        context = "\n\n".join(context_chunks)
-        
-        prompts = {
-            "zero_shot": f"""Based on the following context, answer the question:
-
-Context: {context}
-
-Question: {query}
-
-Answer:""",
-            
-            "few_shot": f"""Based on the following context, answer the question. Here are some examples:
-
-Example 1:
-Context: Electric vehicles use battery power for propulsion.
-Question: How do electric vehicles work?
-Answer: Electric vehicles work by using battery power to drive electric motors that propel the vehicle.
-
-Example 2:
-Context: RAG systems combine retrieval and generation for better AI responses.
-Question: What is RAG?
-Answer: RAG (Retrieval-Augmented Generation) is a system that combines document retrieval with text generation to produce more accurate AI responses.
-
-Now answer this question:
-Context: {context}
-
-Question: {query}
-
-Answer:""",
-            
-            "chain_of_thought": f"""Based on the following context, answer the question step by step:
-
-Context: {context}
-
-Question: {query}
-
-Let me think through this step by step:
-1. First, I'll identify the key information in the context
-2. Then, I'll relate it to the question
-3. Finally, I'll provide a comprehensive answer
-
-Answer:""",
-            
-            "role_based": f"""You are an expert AI researcher specializing in RAG systems and text processing. Based on the following context, provide a detailed technical answer:
-
-Context: {context}
-
-Question: {query}
-
-Expert Answer:"""
+        return {
+            "chunks": retrieved_chunks,
+            "retrieval_time": retrieval_time,
+            "similarity_scores": scores[0].tolist(),
+            "chunk_indices": indices[0].tolist()
         }
-        
-        prompt = prompts.get(prompting_technique, prompts["zero_shot"])
-        
-        # For demo purposes, we'll create a simple response
-        # In production, you'd use OpenAI API or another LLM
-        return self._generate_simple_response(query, context_chunks)
     
-    def _generate_simple_response(self, query: str, context_chunks: List[str]) -> str:
-        """Simple response generation for demo (replace with actual LLM)"""
-        # This is a simplified approach - combine relevant chunks
-        response_parts = []
-        query_lower = query.lower()
+    def get_processing_comparison(self) -> Dict:
+        """Compare processing statistics between methods"""
+        if len(self.processing_stats) < 2:
+            return {}
         
-        for chunk in context_chunks:
-            # Simple relevance check
-            if any(word in chunk.lower() for word in query_lower.split()):
-                response_parts.append(chunk[:200] + "...")
+        comparison = {}
+        methods = list(self.processing_stats.keys())
         
-        if response_parts:
-            return " ".join(response_parts)
-        else:
-            return "Based on the available context: " + " ".join([chunk[:100] + "..." for chunk in context_chunks[:2]])
-    
-    def calculate_f1_score(self, generated_response: str, reference_answer: str) -> float:
-        """Calculate F1 score between generated and reference answers - Simplified version without NLTK"""
-        # Simple word tokenization without NLTK (splits on whitespace)
-        generated_tokens = set(generated_response.lower().split())
-        reference_tokens = set(reference_answer.lower().split())
+        for metric in ["total_time", "chunks_created", "avg_chunk_length", "processing_speed"]:
+            comparison[metric] = {
+                method: self.processing_stats[method][metric] 
+                for method in methods
+            }
         
-        # Remove common punctuation
-        punctuation = '.,!?;:"()[]{}\'`~@#$%^&*-_+=|\\/<>'
-        
-        # Clean tokens
-        generated_clean = set()
-        for token in generated_tokens:
-            cleaned = token.strip(punctuation)
-            if cleaned:
-                generated_clean.add(cleaned)
-        
-        reference_clean = set()
-        for token in reference_tokens:
-            cleaned = token.strip(punctuation)
-            if cleaned:
-                reference_clean.add(cleaned)
-        
-        # Calculate precision and recall
-        if len(generated_clean) == 0:
-            return 0.0
-        
-        intersection = generated_clean.intersection(reference_clean)
-        precision = len(intersection) / len(generated_clean)
-        recall = len(intersection) / len(reference_clean) if len(reference_clean) > 0 else 0
-        
-        # Calculate F1 score
-        if precision + recall == 0:
-            return 0.0
-        
-        f1 = 2 * (precision * recall) / (precision + recall)
-        return f1
+        return comparison
 
-# Helper functions for backward compatibility
+# Backward compatibility functions
 def load_chunks(filename):
     """Load chunks from JSON file"""
     try:
@@ -180,8 +182,3 @@ def create_embeddings(chunks, model_name='all-MiniLM-L6-v2'):
     model = SentenceTransformer(model_name)
     embeddings = model.encode(chunks)
     return embeddings
-
-def save_chunks(chunks, filename):
-    """Save chunks to JSON file"""
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(chunks, f, indent=2)
