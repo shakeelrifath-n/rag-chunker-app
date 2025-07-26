@@ -13,11 +13,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# ROBUST Session State Initialization
+# Session State Initialization
 def initialize_session_state():
     """Initialize all session state variables with error handling"""
     try:
-        # Only import after page config
         from utils import RealTimeRAGEvaluator
         
         if 'rt_evaluator' not in st.session_state:
@@ -63,11 +62,9 @@ st.markdown("Upload documents and watch real-time chunking, embedding generation
 def process_realtime(method_name, text_content, chunk_size, chunk_overlap):
     """Process document in real-time with live updates"""
     
-    # Ensure session state is valid
     ensure_session_state()
     
     # Create containers for updates
-    status_container = st.container()
     progress_container = st.container()
     stats_container = st.container()
     
@@ -130,7 +127,6 @@ tab1, tab2, tab3, tab4 = st.tabs(["📄 Real-Time Processing", "🔍 Live Retrie
 with tab1:
     st.header("📄 Real-Time Document Processing")
     
-    # Ensure session state at tab level
     ensure_session_state()
     
     col1, col2 = st.columns([2, 1])
@@ -196,7 +192,6 @@ with tab1:
 with tab2:
     st.header("🔍 Real-Time Retrieval Testing")
     
-    # Ensure session state
     ensure_session_state()
     
     if st.session_state.processed_methods:
@@ -220,19 +215,22 @@ with tab2:
                 
                 end_time = time.time()
                 
-                # Display timing metrics
-                col_timing1, col_timing2, col_timing3 = st.columns(3)
-                col_timing1.metric("⚡ Retrieval Time", f"{results['retrieval_time']:.4f}s")
-                col_timing2.metric("🕐 Total Time", f"{end_time - start_time:.4f}s")
-                col_timing3.metric("📄 Chunks Found", len(results['chunks']))
-                
-                # Display results with similarity scores
-                st.subheader("📋 Retrieved Chunks")
-                for i, (chunk, score) in enumerate(zip(results['chunks'], results['similarity_scores'])):
-                    similarity_percent = score * 100
-                    with st.expander(f"📄 Chunk {i+1} - Similarity: {similarity_percent:.1f}%", expanded=True):
-                        st.write(chunk)
-                        st.caption(f"Score: {score:.4f}")
+                if "error" in results:
+                    st.error(f"❌ Retrieval error: {results['error']}")
+                else:
+                    # Display timing metrics
+                    col_timing1, col_timing2, col_timing3 = st.columns(3)
+                    col_timing1.metric("⚡ Retrieval Time", f"{results['retrieval_time']:.4f}s")
+                    col_timing2.metric("🕐 Total Time", f"{end_time - start_time:.4f}s")
+                    col_timing3.metric("📄 Chunks Found", len(results['chunks']))
+                    
+                    # Display results with similarity scores
+                    st.subheader("📋 Retrieved Chunks")
+                    for i, (chunk, score) in enumerate(zip(results['chunks'], results['similarity_scores'])):
+                        similarity_percent = score * 100
+                        with st.expander(f"📄 Chunk {i+1} - Similarity: {similarity_percent:.1f}%", expanded=True):
+                            st.write(chunk)
+                            st.caption(f"Score: {score:.4f}")
                         
             except Exception as e:
                 st.error(f"❌ Error during retrieval: {str(e)}")
@@ -242,7 +240,6 @@ with tab2:
 with tab3:
     st.header("🤖 Response Generation")
     
-    # Ensure session state
     ensure_session_state()
     
     if st.session_state.processed_methods:
@@ -298,16 +295,164 @@ with tab3:
 with tab4:
     st.header("📊 Real-Time Performance Analytics")
     
-    # Ensure session state
     ensure_session_state()
     
+    # F1-Score Evaluation Section
+    st.subheader("🎯 F1-Score Evaluation")
+    
+    if st.session_state.processed_methods:
+        # Test queries and reference answers for F1 evaluation
+        test_queries = [
+            "What is the main topic of this document?",
+            "Summarize the key points discussed",
+            "What are the important details mentioned?",
+            "Explain the main concepts",
+            "What conclusions can be drawn?"
+        ]
+        
+        # Generic reference answers that work with most documents
+        reference_answers = [
+            "The document discusses key concepts and main topics with detailed explanations and analysis",
+            "The document covers several important points including methodology, analysis, and detailed information",
+            "Important details include technical specifications, implementation details, and comprehensive explanations",
+            "Main concepts involve systematic approach to problem solving, analysis, and detailed methodology",
+            "The conclusions highlight significant findings, recommendations, and important insights for future work"
+        ]
+        
+        if st.button("🏃‍♂️ Run F1-Score Evaluation", type="primary"):
+            f1_results = []
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            total_evaluations = len(test_queries) * len(st.session_state.processed_methods)
+            current_eval = 0
+            
+            for i, (query, ref_answer) in enumerate(zip(test_queries, reference_answers)):
+                status_text.text(f"Evaluating query {i+1}/{len(test_queries)}: {query[:50]}...")
+                
+                for method in st.session_state.processed_methods:
+                    try:
+                        # Retrieve chunks
+                        retrieved_chunks = st.session_state.rt_evaluator.retrieve_chunks_realtime(query, method, 3)
+                        
+                        if retrieved_chunks['chunks']:
+                            # Generate response  
+                            response = st.session_state.rt_evaluator.generate_response(
+                                query, retrieved_chunks['chunks'], "zero_shot"
+                            )
+                            
+                            # Calculate F1 score
+                            f1_score = st.session_state.rt_evaluator.calculate_f1_score(response, ref_answer)
+                            
+                            f1_results.append({
+                                'Query': f"Q{i+1}",
+                                'Question': query[:30] + "...",
+                                'Method': method,
+                                'F1_Score': f1_score,
+                                'Response_Length': len(response.split()),
+                                'Reference_Length': len(ref_answer.split()),
+                                'Similarity_Score': np.mean(retrieved_chunks['similarity_scores']) if retrieved_chunks['similarity_scores'] else 0
+                            })
+                        else:
+                            # No chunks retrieved
+                            f1_results.append({
+                                'Query': f"Q{i+1}",
+                                'Question': query[:30] + "...",
+                                'Method': method,
+                                'F1_Score': 0.0,
+                                'Response_Length': 0,
+                                'Reference_Length': len(ref_answer.split()),
+                                'Similarity_Score': 0
+                            })
+                        
+                    except Exception as e:
+                        st.warning(f"Error evaluating {method} for query {i+1}: {str(e)}")
+                        f1_results.append({
+                            'Query': f"Q{i+1}",
+                            'Question': query[:30] + "...",
+                            'Method': method,
+                            'F1_Score': 0.0,
+                            'Response_Length': 0,
+                            'Reference_Length': len(ref_answer.split()),
+                            'Similarity_Score': 0
+                        })
+                    
+                    current_eval += 1
+                    progress_bar.progress(current_eval / total_evaluations)
+            
+            status_text.success("F1-Score evaluation complete!")
+            
+            if f1_results:
+                # Create F1-Score DataFrame
+                f1_df = pd.DataFrame(f1_results)
+                
+                # Display F1-Score comparison chart
+                st.subheader("📈 F1-Score Comparison")
+                
+                fig_f1 = px.bar(
+                    f1_df, 
+                    x='Query', 
+                    y='F1_Score', 
+                    color='Method',
+                    title='F1-Score by Query and Method',
+                    labels={'F1_Score': 'F1 Score (0-1)', 'Query': 'Test Query'},
+                    text='F1_Score'
+                )
+                fig_f1.update_traces(texttemplate='%{text:.3f}', textposition='outside')
+                fig_f1.update_layout(yaxis_range=[0, 1])
+                st.plotly_chart(fig_f1, use_container_width=True)
+                
+                # Average F1-Score by method
+                avg_f1 = f1_df.groupby('Method')['F1_Score'].mean().reset_index()
+                
+                col_f1_1, col_f1_2 = st.columns(2)
+                
+                with col_f1_1:
+                    fig_avg_f1 = px.bar(
+                        avg_f1, 
+                        x='Method', 
+                        y='F1_Score',
+                        title='Average F1-Score by Method',
+                        color='Method',
+                        text='F1_Score'
+                    )
+                    fig_avg_f1.update_traces(texttemplate='%{text:.3f}', textposition='outside')
+                    fig_avg_f1.update_layout(yaxis_range=[0, 1])
+                    st.plotly_chart(fig_avg_f1, use_container_width=True)
+                
+                with col_f1_2:
+                    # F1-Score interpretation
+                    if len(avg_f1) > 0:
+                        best_method = avg_f1.loc[avg_f1['F1_Score'].idxmax()]
+                        st.metric("🏆 Best Method", best_method['Method'], f"{best_method['F1_Score']:.3f}")
+                    
+                    st.markdown("**F1-Score Interpretation:**")
+                    st.markdown("- **0.7-1.0**: Excellent quality")  
+                    st.markdown("- **0.5-0.7**: Good quality")
+                    st.markdown("- **0.3-0.5**: Fair quality")
+                    st.markdown("- **0.0-0.3**: Poor quality")
+                
+                # Detailed F1-Score table
+                st.subheader("📋 Detailed F1-Score Results")
+                st.dataframe(f1_df, use_container_width=True)
+                
+                # Download F1 results
+                csv = f1_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download F1-Score Results",
+                    data=csv,
+                    file_name="f1_score_evaluation.csv",
+                    mime="text/csv"
+                )
+    
+    # Processing Performance Section
     if len(st.session_state.processed_methods) >= 2:
+        st.subheader("⚡ Processing Performance Comparison")
+        
         try:
             comparison = st.session_state.rt_evaluator.get_processing_comparison()
             
             if comparison:
-                st.subheader("⚡ Processing Performance Comparison")
-                
                 # Create performance comparison charts
                 col1, col2 = st.columns(2)
                 
@@ -356,7 +501,7 @@ with tab4:
                 st.plotly_chart(fig_speed, use_container_width=True)
                 
                 # Detailed comparison table
-                st.subheader("📋 Detailed Statistics")
+                st.subheader("📋 Processing Statistics")
                 stats_df = pd.DataFrame(st.session_state.rt_evaluator.processing_stats).T
                 st.dataframe(stats_df, use_container_width=True)
         
@@ -448,7 +593,7 @@ try:
             st.sidebar.write(f"• {method}: {chunks_count} chunks")
 
     if st.session_state.current_document:
-        st.sidebar.info(f"📄 Document loaded-: {len(st.session_state.current_document)} characters")
+        st.sidebar.info(f"📄 Document loaded: {len(st.session_state.current_document)} characters")
         
 except Exception as e:
-    st.sidebar.warning("Sidebar status partially unavailable.")
+    st.sidebar.warning("Sidebar status partially unavailable")

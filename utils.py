@@ -25,7 +25,7 @@ class RealTimeRAGEvaluator:
             "total_words": len(text.split()),
             "estimated_chunks": max(1, len(text) // chunk_size)
         }
-        time.sleep(0.1)  # Simulate processing time
+        time.sleep(0.1)
         yield {"step": "analysis", "status": "Document analyzed", "progress": 20, "data": doc_stats}
         
         # Step 2: Chunking
@@ -36,7 +36,7 @@ class RealTimeRAGEvaluator:
         else:
             chunks = self._chunk_recursive_realtime(text, chunk_size, chunk_overlap)
             
-        time.sleep(0.2)  # Simulate chunking time
+        time.sleep(0.2)
         yield {"step": "chunking", "status": f"Created {len(chunks)} chunks", "progress": 50, "data": chunks}
         
         # Step 3: Embedding Generation
@@ -48,7 +48,7 @@ class RealTimeRAGEvaluator:
             embeddings.append(embedding)
             progress = 60 + (30 * (i + 1) / len(chunks))
             yield {"step": "embedding", "status": f"Processed chunk {i+1}/{len(chunks)}", "progress": progress}
-            time.sleep(0.05)  # Small delay for real-time effect
+            time.sleep(0.05)
         
         embeddings = np.array(embeddings).astype('float32')
         
@@ -84,38 +84,57 @@ class RealTimeRAGEvaluator:
         }
     
     def _chunk_fixed_size_realtime(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
-        """Fixed size chunking with real-time processing"""
+        """Fixed size chunking with proper loop termination - BULLET-PROOF VERSION"""
         chunks = []
         start = 0
+        text_length = len(text)
+        iteration_count = 0
         
-        while start < len(text):
-            end = start + chunk_size
-            if end > len(text):
-                end = len(text)
+        # Parameter validation
+        if chunk_overlap >= chunk_size:
+            chunk_overlap = chunk_size // 2
+        if chunk_size <= 0:
+            chunk_size = 500
+        if chunk_overlap < 0:
+            chunk_overlap = 0
+        
+        while start < text_length and iteration_count < 1000:
+            iteration_count += 1
             
+            end = min(start + chunk_size, text_length)
             chunk = text[start:end]
             
             # Try to break at word boundary
-            if end < len(text) and not text[end].isspace():
+            if end < text_length and not text[end].isspace():
                 last_space = chunk.rfind(' ')
-                if last_space > len(chunk) * 0.7:  # Don't break too early
+                if last_space > len(chunk) * 0.7:
                     chunk = chunk[:last_space]
                     end = start + last_space
             
-            if chunk.strip():
+            if chunk.strip() and len(chunk.strip()) > 10:
                 chunks.append(chunk.strip())
             
-            start = end - chunk_overlap
-            if start >= len(text):
+            # Calculate next start with safety checks
+            next_start = end - chunk_overlap
+            if next_start <= start:
+                next_start = start + max(1, chunk_size // 4)
+            
+            start = next_start
+            
+            # Multiple exit conditions
+            if start >= text_length:
+                break
+            if len(chunks) >= 1000:  # Prevent memory issues
                 break
                 
-        return [chunk for chunk in chunks if len(chunk.strip()) > 10]
+        return chunks
     
     def _chunk_recursive_realtime(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
-        """Recursive chunking with real-time processing"""
+        """Recursive chunking with proper handling"""
+        chunks = []
+        
         # Split by paragraphs first
         paragraphs = text.split('\n\n')
-        chunks = []
         current_chunk = ""
         
         for paragraph in paragraphs:
@@ -123,7 +142,7 @@ class RealTimeRAGEvaluator:
             if not paragraph:
                 continue
                 
-            # If adding this paragraph would exceed chunk size
+            # Check if adding paragraph exceeds chunk size
             if len(current_chunk) + len(paragraph) + 2 > chunk_size and current_chunk:
                 chunks.append(current_chunk.strip())
                 # Start new chunk with overlap
@@ -157,6 +176,13 @@ class RealTimeRAGEvaluator:
             if current_chunk.strip():
                 chunks.append(current_chunk.strip())
         
+        # Fallback: simple split if no structure found
+        if len(chunks) == 0:
+            for i in range(0, len(text), chunk_size - chunk_overlap):
+                chunk = text[i:i + chunk_size].strip()
+                if chunk and len(chunk) > 10:
+                    chunks.append(chunk)
+        
         return [chunk for chunk in chunks if len(chunk.strip()) > 10]
     
     def retrieve_chunks_realtime(self, query: str, method_name: str, k: int = 3) -> Dict:
@@ -164,29 +190,35 @@ class RealTimeRAGEvaluator:
         start_time = time.time()
         
         if method_name not in self.vector_stores:
-            return {"chunks": [], "retrieval_time": 0, "similarity_scores": []}
+            return {"chunks": [], "retrieval_time": 0, "similarity_scores": [], "chunk_indices": []}
         
-        # Encode query
-        query_embedding = self.embedding_model.encode([query]).astype('float32')
-        faiss.normalize_L2(query_embedding)
-        
-        # Search with timing
-        scores, indices = self.vector_stores[method_name].search(query_embedding, k)
-        
-        # Get results
-        retrieved_chunks = [self.chunks_data[method_name][idx] for idx in indices[0]]
-        retrieval_time = time.time() - start_time
-        
-        return {
-            "chunks": retrieved_chunks,
-            "retrieval_time": retrieval_time,
-            "similarity_scores": scores[0].tolist(),
-            "chunk_indices": indices[0].tolist()
-        }
+        try:
+            # Encode query
+            query_embedding = self.embedding_model.encode([query]).astype('float32')
+            faiss.normalize_L2(query_embedding)
+            
+            # Search with timing
+            scores, indices = self.vector_stores[method_name].search(query_embedding, k)
+            
+            # Get results
+            retrieved_chunks = [self.chunks_data[method_name][idx] for idx in indices[0]]
+            retrieval_time = time.time() - start_time
+            
+            return {
+                "chunks": retrieved_chunks,
+                "retrieval_time": retrieval_time,
+                "similarity_scores": scores[0].tolist(),
+                "chunk_indices": indices[0].tolist()
+            }
+        except Exception as e:
+            return {"chunks": [], "retrieval_time": 0, "similarity_scores": [], "chunk_indices": [], "error": str(e)}
     
     def generate_response(self, query: str, context_chunks: List[str], 
                          prompting_technique: str = "zero_shot") -> str:
         """Generate response using different prompting techniques"""
+        
+        if not context_chunks:
+            return "No relevant context found for the query."
         
         context = "\n\n".join(context_chunks)
         
@@ -226,7 +258,7 @@ Question: {query}
 
 Let me think through this step by step:
 1. First, I'll identify the key information in the context
-2. Then, I'll relate it to the question
+2. Then, I'll relate it to the question  
 3. Finally, I'll provide a comprehensive answer
 
 Answer:""",
@@ -240,11 +272,13 @@ Question: {query}
 Expert Answer:"""
         }
         
-        # For demo purposes, create a simple response
         return self._generate_simple_response(query, context_chunks)
     
     def _generate_simple_response(self, query: str, context_chunks: List[str]) -> str:
         """Simple response generation for demo"""
+        if not context_chunks:
+            return "No relevant information found to answer the query."
+        
         response_parts = []
         query_lower = query.lower()
         query_words = set(query_lower.split())
@@ -262,6 +296,9 @@ Expert Answer:"""
     
     def calculate_f1_score(self, generated_response: str, reference_answer: str) -> float:
         """Calculate F1 score between generated and reference answers"""
+        if not generated_response or not reference_answer:
+            return 0.0
+        
         # Simple word tokenization
         generated_tokens = set(generated_response.lower().split())
         reference_tokens = set(reference_answer.lower().split())
@@ -287,7 +324,7 @@ Expert Answer:"""
             return 0.0
         
         intersection = generated_clean.intersection(reference_clean)
-        precision = len(intersection) / len(generated_clean)
+        precision = len(intersection) / len(generated_clean) if len(generated_clean) > 0 else 0
         recall = len(intersection) / len(reference_clean) if len(reference_clean) > 0 else 0
         
         # Calculate F1 score
@@ -299,7 +336,7 @@ Expert Answer:"""
     
     def get_processing_comparison(self) -> Dict:
         """Compare processing statistics between methods"""
-        if len(self.processing_stats) < 2:
+        if len(self.processing_stats) < 1:
             return {}
         
         comparison = {}
