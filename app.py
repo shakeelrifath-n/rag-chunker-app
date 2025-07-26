@@ -451,4 +451,4 @@ try:
         st.sidebar.info(f"📄 Document loaded: {len(st.session_state.current_document)} characters")
         
 except Exception as e:
-    st.sidebar.warning("Sidebar status partially unavailable")
+    st.sidebar.warning("Sidebar status partially unavailable.")
