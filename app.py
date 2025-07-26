@@ -5,7 +5,8 @@ import time
 import plotly.graph_objects as go
 import plotly.express as px
 from io import StringIO
-from utils import RealTimeRAGEvaluator
+from utils import RAGEvaluator as RealTimeRAGEvaluator
+
 
 # Page configuration
 st.set_page_config(
