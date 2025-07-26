@@ -2,686 +2,407 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time
-import plotly.graph_objects as go
 import plotly.express as px
-from io import StringIO
-from typing import List
+import plotly.graph_objects as go
+from utils import EnvironmentalRAGSystem
 
-
-# Page configuration
+# Professional page configuration
 st.set_page_config(
-    page_title="Real-Time RAG Processing System",
-    page_icon="⚡",
-    layout="wide"
+    page_title="Environmental RAG System - Shakeel Rifath",
+    page_icon="🌍",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Session State Initialization
-def initialize_session_state():
-    """Initialize all session state variables with error handling"""
-    try:
-        from utils import RealTimeRAGEvaluator
-        
-        if 'rt_evaluator' not in st.session_state:
-            st.session_state.rt_evaluator = RealTimeRAGEvaluator()
-        
-        if 'processed_methods' not in st.session_state:
-            st.session_state.processed_methods = []
-        
-        if 'current_document' not in st.session_state:
-            st.session_state.current_document = ""
-        
-        if 'document_type' not in st.session_state:
-            st.session_state.document_type = "generic"
-            
-        if 'initialization_complete' not in st.session_state:
-            st.session_state.initialization_complete = True
-            
-        return True
-        
-    except Exception as e:
-        st.error(f"❌ Failed to initialize system: {str(e)}")
-        st.error("Please refresh the page or check your dependencies.")
-        return False
+# Custom CSS for professional appearance
+st.markdown("""
+<style>
+    .main-header {
+        background: linear-gradient(90deg, #2E8B57, #228B22);
+        padding: 1.5rem;
+        border-radius: 15px;
+        color: white;
+        text-align: center;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .metric-card {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 10px;
+        border-left: 5px solid #2E8B57;
+        margin: 1rem 0;
+    }
+    .success-box {
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+    .stProgress > div > div > div > div {
+        background: linear-gradient(90deg, #2E8B57, #228B22);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Main header
+st.markdown("""
+<div class="main-header">
+    <h1>🌍 Environmental Impact Report RAG System</h1>
+    <h3>Capstone Project - Shakeel Rifath</h3>
+    <p><strong>BGE-base-en-v1.5 • Qdrant Vector Database • Paragraph Chunking • Few-Shot Answer-First Prompting</strong></p>
+</div>
+""", unsafe_allow_html=True)
 
 # Initialize system
-if not initialize_session_state():
-    st.stop()
+@st.cache_resource
+def initialize_rag_system():
+    return EnvironmentalRAGSystem(docs_path="docs/")
 
-# Safety check function
-def ensure_session_state():
-    """Ensure session state variables exist before use"""
-    if 'rt_evaluator' not in st.session_state:
-        initialize_session_state()
-    
-    if not hasattr(st.session_state, 'rt_evaluator'):
-        st.error("❌ System not properly initialized. Please refresh the page.")
-        st.stop()
+if "rag_system" not in st.session_state:
+    st.session_state.rag_system = initialize_rag_system()
 
-# Call safety check
-ensure_session_state()
+env_rag = st.session_state.rag_system
 
-# Enhanced document analysis
-def analyze_document_type(text: str) -> str:
-    """Analyze document type for better reference answers"""
-    text_lower = text.lower()
-    
-    if any(word in text_lower for word in ['rag', 'retrieval', 'embedding', 'vector', 'faiss', 'chunk']):
-        return "rag_technical"
-    elif any(word in text_lower for word in ['machine learning', 'ai', 'neural', 'model', 'algorithm']):
-        return "ai_ml"
-    elif any(word in text_lower for word in ['business', 'market', 'strategy', 'company', 'revenue']):
-        return "business"
-    elif any(word in text_lower for word in ['research', 'study', 'analysis', 'methodology', 'results']):
-        return "research"
-    else:
-        return "generic"
-
-def get_optimized_reference_answers(document_type: str) -> List[str]:
-    """Get optimized reference answers based on document type"""
-    
-    if document_type == "rag_technical":
-        return [
-            "The main topic focuses on retrieval-augmented generation systems, chunking strategies, vector embeddings, and semantic search technologies for improved AI responses",
-            "Key points include FAISS vector storage, embedding generation, chunking methodologies, similarity search, and performance optimization for RAG systems",
-            "Important details cover technical implementation, vector databases, text processing, embedding models, chunk size optimization, and retrieval mechanisms",
-            "Main concepts involve systematic approach to document processing, semantic similarity, vector search, and integration of retrieval with generation for enhanced AI capabilities",
-            "Conclusions highlight the effectiveness of different chunking strategies, importance of proper vector indexing, and recommendations for optimizing RAG system performance"
-        ]
-    elif document_type == "ai_ml":
-        return [
-            "The document discusses machine learning concepts, artificial intelligence systems, neural networks, and algorithmic approaches for data processing and model optimization",
-            "Key points include model architecture, training methodologies, performance metrics, data preprocessing, and optimization techniques for machine learning systems",
-            "Important details cover technical specifications, implementation approaches, algorithmic efficiency, model evaluation, and best practices for AI development",
-            "Main concepts involve systematic machine learning methodology, model selection, performance evaluation, and optimization strategies for artificial intelligence applications",
-            "Conclusions emphasize model performance, evaluation metrics, optimization results, and recommendations for future machine learning system development"
-        ]
-    elif document_type == "business":
-        return [
-            "The document focuses on business strategy, market analysis, company operations, and strategic planning for organizational growth and development",
-            "Key points include market research, business methodology, strategic analysis, operational efficiency, and performance indicators for business success",
-            "Important details cover business specifications, implementation strategies, market positioning, operational details, and competitive analysis approaches",
-            "Main concepts involve systematic business approach, strategic planning, market analysis, and optimization strategies for organizational performance",
-            "Conclusions highlight business findings, strategic recommendations, market insights, and suggestions for future business development and growth"
-        ]
-    elif document_type == "research":
-        return [
-            "The document presents research methodology, study design, data analysis, and findings from systematic investigation and academic research",
-            "Key points include research methodology, data collection, analytical approaches, statistical analysis, and evidence-based findings from the study",
-            "Important details cover research specifications, methodological approaches, data analysis techniques, statistical results, and research validation methods",
-            "Main concepts involve systematic research methodology, data analysis, evidence evaluation, and scientific approach to investigation and discovery",
-            "Conclusions highlight research findings, statistical significance, study implications, and recommendations for future research and practical applications"
-        ]
-    else:  # generic
-        return [
-            "The document discusses key concepts and main topics with detailed explanations, analysis, and comprehensive information about the subject matter",
-            "Key points include methodology, analysis, detailed information, systematic approach, and important aspects covered throughout the document",
-            "Important details include specifications, implementation details, comprehensive explanations, technical aspects, and detailed analysis of the subject",
-            "Main concepts involve systematic approach to the topic, detailed analysis, methodological considerations, and comprehensive coverage of relevant aspects",
-            "Conclusions highlight significant findings, recommendations, important insights, and suggestions for future consideration and practical application"
-        ]
-
-# Title and description
-st.title("⚡ Real-Time RAG Processing System")
-st.markdown("Upload documents and watch real-time chunking, embedding generation, and performance analysis")
-
-def process_realtime(method_name, text_content, chunk_size, chunk_overlap):
-    """Process document in real-time with live updates"""
-    
-    ensure_session_state()
-    
-    # Analyze document type for better evaluation
-    st.session_state.document_type = analyze_document_type(text_content)
-    
-    # Create containers for updates
-    progress_container = st.container()
-    stats_container = st.container()
-    
-    with progress_container:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-    
-    with stats_container:
-        stats_display = st.empty()
-    
-    try:
-        # Process with real-time updates
-        for update in st.session_state.rt_evaluator.process_document_realtime(
-            text_content, method_name, chunk_size, chunk_overlap
-        ):
-            # Update progress bar
-            progress_bar.progress(int(update["progress"]))
-            
-            # Update status
-            status_text.info(f"**{update['step'].title()}**: {update['status']}")
-            
-            # Update statistics if available
-            if "data" in update:
-                if update["step"] == "analysis":
-                    with stats_display.container():
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Total Characters", update['data']['total_chars'])
-                        col2.metric("Total Words", update['data']['total_words'])
-                        col3.metric("Estimated Chunks", update['data']['estimated_chunks'])
-                elif update["step"] == "chunking":
-                    with stats_display.container():
-                        st.success(f"✅ Created {len(update['data'])} chunks")
-            
-            # Update final stats
-            if "stats" in update:
-                with stats_display.container():
-                    col1, col2, col3, col4 = st.columns(4)
-                    col1.metric("Processing Time", f"{update['stats']['total_time']:.2f}s")
-                    col2.metric("Chunks Created", update['stats']['chunks_created'])
-                    col3.metric("Avg Chunk Length", f"{update['stats']['avg_chunk_length']:.0f}")
-                    col4.metric("Processing Speed", f"{update['stats']['processing_speed']:.1f} chunks/s")
-            
-            # Small delay for visual effect
-            time.sleep(0.1)
-        
-        # Add to processed methods
-        if method_name not in st.session_state.processed_methods:
-            st.session_state.processed_methods.append(method_name)
-        
-        st.success(f"✅ {method_name} processing completed successfully!")
-        return True
-        
-    except Exception as e:
-        st.error(f"❌ Error during processing: {str(e)}")
-        return False
-
-# Main tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📄 Real-Time Processing", "🔍 Live Retrieval", "🤖 Response Generation", "📊 Performance Analytics"])
+# Main navigation
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🏗️ System Setup", 
+    "🔍 Document Search", 
+    "🤖 Answer Generation", 
+    "📊 F1-Score Evaluation",
+    "📈 Analytics Dashboard"
+])
 
 with tab1:
-    st.header("📄 Real-Time Document Processing")
+    st.header("🏗️ Environmental RAG System Setup")
     
-    ensure_session_state()
+    st.markdown("""
+    ### System Configuration
+    - **Documents**: 10 Environmental Impact Reports (5-10 pages each)
+    - **Embedding Model**: BGE-base-en-v1.5 from Hugging Face
+    - **Vector Database**: Qdrant with Cosine Similarity
+    - **Chunking Strategy**: Paragraph-based chunking
+    - **Prompting Technique**: Few-shot, answer-first approach
+    """)
     
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        # File upload
-        uploaded_file = st.file_uploader("Upload a text document", type=['txt'], key="realtime_upload")
-        
-        # Manual text input
-        st.markdown("**Or paste text directly:**")
-        manual_text = st.text_area("Paste your text here:", height=200, key="manual_text")
-        
-        # Processing parameters
-        st.subheader("⚙️ Processing Parameters")
-        col_param1, col_param2 = st.columns(2)
-        
-        with col_param1:
-            chunk_size = st.slider("Chunk Size (characters):", 200, 1000, 500)
-        with col_param2:
-            chunk_overlap = st.slider("Chunk Overlap (characters):", 0, 200, 50)
+        if st.button("🚀 Initialize Environmental Database", type="primary", use_container_width=True):
+            progress_container = st.container()
+            
+            with progress_container:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                for update in env_rag.process_documents_realtime():
+                    progress_bar.progress(int(update["progress"]))
+                    status_text.info(f"**{update['step'].title()}**: {update['status']}")
+                    
+                    if update["step"] == "error":
+                        st.error(f"❌ {update['status']}")
+                        break
+                    
+                    if update["step"] == "complete":
+                        st.markdown('<div class="success-box">✅ Environmental RAG system ready!</div>', unsafe_allow_html=True)
+                        
+                        stats = update.get("stats", {})
+                        
+                        col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+                        with col_stat1:
+                            st.metric("📄 Documents", stats.get("documents_processed", 0))
+                        with col_stat2:
+                            st.metric("📝 Total Chunks", stats.get("total_chunks", 0))
+                        with col_stat3:
+                            st.metric("⏱️ Processing Time", f"{stats.get('total_time', 0):.1f}s")
+                        with col_stat4:
+                            st.metric("📊 Avg Chunks/Doc", f"{stats.get('avg_chunks_per_doc', 0):.1f}")
     
     with col2:
-        st.subheader("📊 Document Info")
-        info_placeholder = st.empty()
-    
-    # Get text content
-    text_content = ""
-    if uploaded_file is not None:
-        try:
-            text_content = StringIO(uploaded_file.getvalue().decode("utf-8")).read()
-            st.session_state.current_document = text_content
-            with info_placeholder.container():
-                st.success(f"📄 File uploaded")
-                st.metric("Characters", len(text_content))
-                st.metric("Words", len(text_content.split()))
-        except Exception as e:
-            st.error(f"Error reading file: {str(e)}")
-    elif manual_text.strip():
-        text_content = manual_text.strip()
-        st.session_state.current_document = text_content
-        with info_placeholder.container():
-            st.info(f"📝 Manual text ready")
-            st.metric("Characters", len(text_content))
-            st.metric("Words", len(text_content.split()))
-    
-    # Processing buttons
-    if text_content:
-        st.subheader("🚀 Start Processing")
-        col_btn1, col_btn2 = st.columns(2)
-        
-        with col_btn1:
-            if st.button("🔧 Process with Fixed Size Chunking", key="process_fixed", type="primary"):
-                with st.expander("🔄 Processing Progress", expanded=True):
-                    process_realtime("Fixed Size", text_content, chunk_size, chunk_overlap)
-        
-        with col_btn2:
-            if st.button("🌲 Process with Recursive Chunking", key="process_recursive", type="primary"):
-                with st.expander("🔄 Processing Progress", expanded=True):
-                    process_realtime("Recursive", text_content, chunk_size, chunk_overlap)
-    else:
-        st.info("👆 Please upload a document or paste text to start processing")
+        st.markdown("### 📋 Processing Steps")
+        st.markdown("""
+        1. **PDF Loading**: Extract text from 10 reports
+        2. **Paragraph Chunking**: Split by paragraph breaks
+        3. **BGE Embedding**: Generate 768-dim vectors
+        4. **Qdrant Indexing**: Store with cosine similarity
+        5. **System Ready**: Ready for queries!
+        """)
 
 with tab2:
-    st.header("🔍 Real-Time Retrieval Testing")
+    st.header("🔍 Environmental Document Search")
     
-    ensure_session_state()
+    col1, col2 = st.columns([3, 1])
     
-    if st.session_state.processed_methods:
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            query = st.text_input("Enter your query:", value="What is the main topic discussed?")
+    with col1:
+        query = st.text_input(
+            "🔍 Enter your environmental query:",
+            placeholder="What are the air quality impacts of the proposed facility?",
+            help="Ask questions about environmental impacts, mitigation measures, or compliance requirements"
+        )
+    
+    with col2:
+        k_results = st.slider("📊 Number of results:", 1, 10, 5)
+        search_button = st.button("🔍 Search Reports", type="primary", use_container_width=True)
+    
+    if search_button and query:
+        with st.spinner("🔍 Searching environmental reports..."):
+            results = env_rag.search_environmental_reports(query, k_results)
             
-        with col2:
-            k_retrieve = st.slider("Number of chunks to retrieve:", 1, 5, 3)
-            method_select = st.selectbox("Select processing method:", st.session_state.processed_methods)
-        
-        if st.button("🚀 Search in Real-Time", type="primary"):
-            start_time = time.time()
+            if "error" not in results and results["chunks"]:
+                # Display search metrics
+                col_metric1, col_metric2, col_metric3 = st.columns(3)
+                with col_metric1:
+                    st.metric("⚡ Retrieval Time", f"{results['retrieval_time']:.4f}s")
+                with col_metric2:
+                    st.metric("📄 Results Found", len(results['chunks']))
+                with col_metric3:
+                    st.metric("🎯 Avg Similarity", f"{np.mean(results['scores']):.3f}")
+                
+                st.success(f"✅ Found {len(results['chunks'])} relevant passages")
+                
+                # Display results
+                for i, (chunk, score, meta) in enumerate(zip(
+                    results['chunks'], results['scores'], results['metadata']
+                )):
+                    with st.expander(f"📄 Result {i+1}: {meta['topic']} (Similarity: {score:.3f})", expanded=i==0):
+                        st.markdown(f"**Document**: {meta['document']}")
+                        st.markdown(f"**Topic**: {meta['topic']}")
+                        st.write(chunk)
+                        st.caption(f"Chunk ID: {meta['chunk_id']}")
             
-            try:
-                with st.spinner("Searching through vectors..."):
-                    results = st.session_state.rt_evaluator.retrieve_chunks_realtime(
-                        query, method_select, k_retrieve
-                    )
-                
-                end_time = time.time()
-                
-                if "error" in results:
-                    st.error(f"❌ Retrieval error: {results['error']}")
-                else:
-                    # Display timing metrics
-                    col_timing1, col_timing2, col_timing3 = st.columns(3)
-                    col_timing1.metric("⚡ Retrieval Time", f"{results['retrieval_time']:.4f}s")
-                    col_timing2.metric("🕐 Total Time", f"{end_time - start_time:.4f}s")
-                    col_timing3.metric("📄 Chunks Found", len(results['chunks']))
-                    
-                    # Display results with similarity scores
-                    st.subheader("📋 Retrieved Chunks")
-                    for i, (chunk, score) in enumerate(zip(results['chunks'], results['similarity_scores'])):
-                        similarity_percent = score * 100
-                        with st.expander(f"📄 Chunk {i+1} - Similarity: {similarity_percent:.1f}%", expanded=True):
-                            st.write(chunk)
-                            st.caption(f"Score: {score:.4f}")
-                        
-            except Exception as e:
-                st.error(f"❌ Error during retrieval: {str(e)}")
-    else:
-        st.info("👆 Please process a document in the 'Real-Time Processing' tab first")
+            elif "error" in results:
+                st.error(f"❌ Search error: {results['error']}")
+                st.info("💡 Please initialize the system first in the 'System Setup' tab")
+            else:
+                st.warning("⚠️ No relevant results found. Try a different query.")
 
 with tab3:
-    st.header("🤖 Response Generation")
+    st.header("🤖 Few-Shot Answer-First Response Generation")
     
-    ensure_session_state()
+    st.markdown("""
+    ### Answer-First Prompting Technique
+    This system uses few-shot prompting with answer-first structure to provide direct, comprehensive responses.
+    """)
     
-    if st.session_state.processed_methods:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Enhanced test queries
-            test_queries = [
-                "What is the main topic of this document?",
-                "Summarize the key points discussed",
-                "What are the important details mentioned?",
-                "Explain the main concepts",
-                "What conclusions can be drawn?"
-            ]
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        answer_query = st.text_input(
+            "❓ Environmental question:",
+            placeholder="How does the project affect local water quality?",
+            help="Ask specific questions about environmental impacts for detailed answers"
+        )
+    
+    with col2:
+        context_chunks = st.slider("📚 Context chunks:", 1, 5, 3)
+        generate_button = st.button("🤖 Generate Answer", type="primary", use_container_width=True)
+    
+    if generate_button and answer_query:
+        with st.spinner("🤖 Generating comprehensive answer..."):
+            # Search for relevant context
+            search_results = env_rag.search_environmental_reports(answer_query, context_chunks)
             
-            selected_query = st.selectbox("Select a test query:", test_queries)
-            custom_query = st.text_input("Or enter custom query:")
-            
-            final_query = custom_query if custom_query.strip() else selected_query
-            
-        with col2:
-            chunking_method = st.selectbox("Chunking method:", st.session_state.processed_methods)
-            prompting_technique = st.selectbox("Prompting technique:", 
-                                             ["zero_shot", "few_shot", "chain_of_thought", "role_based"])
-        
-        if st.button("🤖 Generate Response", type="primary"):
-            try:
-                with st.spinner("Generating response..."):
-                    # Retrieve chunks
-                    retrieved_chunks = st.session_state.rt_evaluator.retrieve_chunks_realtime(
-                        final_query, chunking_method, 3
-                    )
-                    
-                    # Generate response
-                    response = st.session_state.rt_evaluator.generate_response(
-                        final_query, retrieved_chunks['chunks'], prompting_technique
-                    )
-                    
-                    # Display results
-                    st.subheader("🎯 Generated Response")
-                    st.write(response)
-                    
-                    st.subheader("📚 Source Context")
-                    for i, chunk in enumerate(retrieved_chunks['chunks'], 1):
-                        with st.expander(f"Source {i}"):
-                            st.write(chunk)
-                            
-            except Exception as e:
-                st.error(f"❌ Error during response generation: {str(e)}")
-    else:
-        st.info("👆 Please process a document first")
+            if search_results['chunks']:
+                # Generate response using few-shot, answer-first prompting
+                response = env_rag.generate_few_shot_answer_first_response(
+                    answer_query, search_results['chunks']
+                )
+                
+                st.subheader("🎯 Generated Response")
+                st.markdown(f"**Query**: {answer_query}")
+                st.write(response)
+                
+                st.subheader("📚 Source Documents")
+                for i, (chunk, meta) in enumerate(zip(search_results['chunks'], search_results['metadata'])):
+                    with st.expander(f"📖 Source {i+1}: {meta['topic']}"):
+                        st.markdown(f"**Document**: {meta['document']}")
+                        st.write(chunk[:400] + "..." if len(chunk) > 400 else chunk)
+            else:
+                st.error("❌ No relevant context found. Please check your query or initialize the system.")
 
 with tab4:
-    st.header("📊 Real-Time Performance Analytics")
+    st.header("📊 F1-Score Evaluation & Performance Metrics")
     
-    ensure_session_state()
+    st.markdown("""
+    ### Evaluation Methodology
+    F1-Score evaluation using environmental terminology-focused preprocessing and domain-specific reference answers.
+    """)
     
-    # Enhanced F1-Score Evaluation Section
-    st.subheader("🎯 Enhanced F1-Score Evaluation")
+    if st.button("🏃‍♂️ Run Comprehensive F1-Score Evaluation", type="primary", use_container_width=True):
+        test_queries = env_rag.get_environmental_test_queries()
+        
+        f1_results = []
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, (query, reference) in enumerate(test_queries):
+            status_text.info(f"Evaluating query {i+1}/{len(test_queries)}: {query[:50]}...")
+            
+            # Search and generate response
+            search_results = env_rag.search_environmental_reports(query, 3)
+            
+            if search_results['chunks']:
+                response = env_rag.generate_few_shot_answer_first_response(query, search_results['chunks'])
+                f1_score = env_rag.calculate_f1_score(response, reference)
+                
+                f1_results.append({
+                    'Query_ID': f"Q{i+1}",
+                    'Question': query[:50] + "...",
+                    'F1_Score': f1_score,
+                    'Response_Length': len(response.split()),
+                    'Reference_Length': len(reference.split()),
+                    'Retrieval_Time': search_results['retrieval_time'],
+                    'Similarity_Score': np.mean(search_results['scores'])
+                })
+            else:
+                f1_results.append({
+                    'Query_ID': f"Q{i+1}",
+                    'Question': query[:50] + "...",
+                    'F1_Score': 0.0,
+                    'Response_Length': 0,
+                    'Reference_Length': len(reference.split()),
+                    'Retrieval_Time': 0,
+                    'Similarity_Score': 0
+                })
+            
+            progress_bar.progress((i + 1) / len(test_queries))
+        
+        status_text.success("✅ F1-Score evaluation complete!")
+        
+        if f1_results:
+            df = pd.DataFrame(f1_results)
+            
+            # Key metrics
+            avg_f1 = df['F1_Score'].mean()
+            max_f1 = df['F1_Score'].max()
+            avg_retrieval_time = df['Retrieval_Time'].mean()
+            
+            # Display metrics
+            col_metric1, col_metric2, col_metric3, col_metric4 = st.columns(4)
+            with col_metric1:
+                st.metric("📊 Average F1-Score", f"{avg_f1:.3f}")
+            with col_metric2:
+                st.metric("🏆 Best F1-Score", f"{max_f1:.3f}")
+            with col_metric3:
+                st.metric("⚡ Avg Retrieval Time", f"{avg_retrieval_time:.4f}s")
+            with col_metric4:
+                st.metric("📈 Total Queries", len(df))
+            
+            # F1-Score visualization
+            fig_f1 = px.bar(
+                df, 
+                x='Query_ID', 
+                y='F1_Score',
+                title='F1-Score by Query',
+                color='F1_Score',
+                color_continuous_scale='Viridis',
+                text='F1_Score'
+            )
+            fig_f1.update_traces(texttemplate='%{text:.3f}', textposition='outside')
+            fig_f1.update_layout(yaxis_range=[0, 1])
+            st.plotly_chart(fig_f1, use_container_width=True)
+            
+            # Performance interpretation
+            st.subheader("📋 F1-Score Interpretation")
+            if avg_f1 >= 0.7:
+                st.success("🎉 Excellent Performance: F1-Score ≥ 0.7")
+            elif avg_f1 >= 0.5:
+                st.info("👍 Good Performance: F1-Score ≥ 0.5")
+            elif avg_f1 >= 0.3:
+                st.warning("⚠️ Fair Performance: F1-Score ≥ 0.3")
+            else:
+                st.error("❌ Needs Improvement: F1-Score < 0.3")
+            
+            # Detailed results table
+            st.subheader("📊 Detailed Evaluation Results")
+            st.dataframe(df, use_container_width=True)
+            
+            # Download results
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="📥 Download F1-Score Results (CSV)",
+                data=csv,
+                file_name="environmental_rag_f1_evaluation.csv",
+                mime="text/csv"
+            )
+
+with tab5:
+    st.header("📈 Analytics Dashboard")
     
-    if st.session_state.processed_methods:
-        # Enhanced test queries
-        test_queries = [
-            "What is the main topic of this document?",
-            "Summarize the key points discussed",
-            "What are the important details mentioned?",
-            "Explain the main concepts",
-            "What conclusions can be drawn?"
-        ]
+    if hasattr(env_rag, 'processing_stats') and env_rag.processing_stats:
+        stats = env_rag.processing_stats
         
-        # Get optimized reference answers based on document type
-        document_type = getattr(st.session_state, 'document_type', 'generic')
-        reference_answers = get_optimized_reference_answers(document_type)
+        # System performance metrics
+        st.subheader("⚡ System Performance")
         
-        st.info(f"📄 Document type detected: **{document_type.replace('_', ' ').title()}** - Using optimized reference answers")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("📄 Documents Processed", stats.get('documents_processed', 0))
+        with col2:
+            st.metric("📝 Total Chunks", stats.get('total_chunks', 0))
+        with col3:
+            st.metric("⚡ Processing Speed", f"{stats.get('processing_speed', 0):.1f} chunks/s")
+        with col4:
+            st.metric("📊 Avg Chunk Length", f"{np.mean([len(chunk) for chunk in env_rag.chunks]):.0f}" if env_rag.chunks else "0")
         
-        if st.button("🏃‍♂️ Run Enhanced F1-Score Evaluation", type="primary"):
-            f1_results = []
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+        # Document distribution
+        if env_rag.chunk_metadata:
+            st.subheader("📊 Document Distribution")
             
-            total_evaluations = len(test_queries) * len(st.session_state.processed_methods) * 4  # 4 prompting techniques
-            current_eval = 0
+            # Create document distribution chart
+            doc_distribution = {}
+            for metadata in env_rag.chunk_metadata:
+                topic = metadata['topic']
+                doc_distribution[topic] = doc_distribution.get(topic, 0) + 1
             
-            for i, (query, ref_answer) in enumerate(zip(test_queries, reference_answers)):
-                status_text.text(f"Evaluating query {i+1}/{len(test_queries)}: {query[:50]}...")
-                
-                for method in st.session_state.processed_methods:
-                    for technique in ["zero_shot", "few_shot", "chain_of_thought", "role_based"]:
-                        try:
-                            # Retrieve chunks
-                            retrieved_chunks = st.session_state.rt_evaluator.retrieve_chunks_realtime(query, method, 3)
-                            
-                            if retrieved_chunks['chunks']:
-                                # Generate response with specific technique
-                                response = st.session_state.rt_evaluator.generate_response(
-                                    query, retrieved_chunks['chunks'], technique
-                                )
-                                
-                                # Calculate F1 score
-                                f1_score = st.session_state.rt_evaluator.calculate_f1_score(response, ref_answer)
-                                
-                                f1_results.append({
-                                    'Query': f"Q{i+1}",
-                                    'Question': query[:30] + "...",
-                                    'Method': method,
-                                    'Technique': technique,
-                                    'F1_Score': f1_score,
-                                    'Response_Length': len(response.split()),
-                                    'Reference_Length': len(ref_answer.split()),
-                                    'Similarity_Score': np.mean(retrieved_chunks['similarity_scores']) if retrieved_chunks['similarity_scores'] else 0
-                                })
-                            else:
-                                # No chunks retrieved
-                                f1_results.append({
-                                    'Query': f"Q{i+1}",
-                                    'Question': query[:30] + "...",
-                                    'Method': method,
-                                    'Technique': technique,
-                                    'F1_Score': 0.0,
-                                    'Response_Length': 0,
-                                    'Reference_Length': len(ref_answer.split()),
-                                    'Similarity_Score': 0
-                                })
-                            
-                        except Exception as e:
-                            st.warning(f"Error evaluating {method}/{technique} for query {i+1}: {str(e)}")
-                            f1_results.append({
-                                'Query': f"Q{i+1}",
-                                'Question': query[:30] + "...",
-                                'Method': method,
-                                'Technique': technique,
-                                'F1_Score': 0.0,
-                                'Response_Length': 0,
-                                'Reference_Length': len(ref_answer.split()),
-                                'Similarity_Score': 0
-                            })
-                        
-                        current_eval += 1
-                        progress_bar.progress(current_eval / total_evaluations)
+            df_dist = pd.DataFrame(list(doc_distribution.items()), columns=['Topic', 'Chunks'])
             
-            status_text.success("Enhanced F1-Score evaluation complete!")
+            fig_dist = px.pie(
+                df_dist, 
+                values='Chunks', 
+                names='Topic',
+                title='Chunk Distribution by Environmental Topic'
+            )
+            st.plotly_chart(fig_dist, use_container_width=True)
             
-            if f1_results:
-                # Create F1-Score DataFrame
-                f1_df = pd.DataFrame(f1_results)
-                
-                # Display F1-Score comparison chart by method
-                st.subheader("📈 F1-Score Comparison by Method")
-                
-                method_avg = f1_df.groupby('Method')['F1_Score'].mean().reset_index()
-                
-                fig_method = px.bar(
-                    method_avg, 
-                    x='Method', 
-                    y='F1_Score',
-                    title='Average F1-Score by Chunking Method',
-                    color='Method',
-                    text='F1_Score'
-                )
-                fig_method.update_traces(texttemplate='%{text:.3f}', textposition='outside')
-                fig_method.update_layout(yaxis_range=[0, max(method_avg['F1_Score']) * 1.2])
-                st.plotly_chart(fig_method, use_container_width=True)
-                
-                # F1-Score by technique
-                st.subheader("📈 F1-Score Comparison by Prompting Technique")
-                
-                technique_avg = f1_df.groupby(['Method', 'Technique'])['F1_Score'].mean().reset_index()
-                
-                fig_technique = px.bar(
-                    technique_avg, 
-                    x='Technique', 
-                    y='F1_Score', 
-                    color='Method',
-                    title='F1-Score by Prompting Technique and Method',
-                    barmode='group',
-                    text='F1_Score'
-                )
-                fig_technique.update_traces(texttemplate='%{text:.3f}', textposition='outside')
-                st.plotly_chart(fig_technique, use_container_width=True)
-                
-                # Best combinations
-                col_best1, col_best2 = st.columns(2)
-                
-                with col_best1:
-                    best_overall = f1_df.loc[f1_df['F1_Score'].idxmax()]
-                    st.metric("🏆 Best Overall", 
-                             f"{best_overall['Method']} + {best_overall['Technique']}", 
-                             f"{best_overall['F1_Score']:.3f}")
-                
-                with col_best2:
-                    st.markdown("**F1-Score Interpretation:**")
-                    max_score = f1_df['F1_Score'].max()
-                    if max_score >= 0.7:
-                        st.success("🌟 Excellent quality achieved!")
-                    elif max_score >= 0.5:
-                        st.info("✅ Good quality achieved!")
-                    elif max_score >= 0.3:
-                        st.warning("⚠️ Fair quality - room for improvement")
-                    else:
-                        st.error("❌ Needs optimization")
-                
-                # Detailed F1-Score table
-                st.subheader("📋 Detailed F1-Score Results")
-                st.dataframe(f1_df.sort_values('F1_Score', ascending=False), use_container_width=True)
-                
-                # Download enhanced results
-                csv = f1_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download Enhanced F1-Score Results",
-                    data=csv,
-                    file_name=f"enhanced_f1_score_evaluation_{document_type}.csv",
-                    mime="text/csv"
-                )
+            # Topic breakdown table
+            st.subheader("📋 Topic Breakdown")
+            st.dataframe(df_dist, use_container_width=True)
     
-    # Processing Performance Section (existing code continues...)
-    if len(st.session_state.processed_methods) >= 2:
-        st.subheader("⚡ Processing Performance Comparison")
-        
-        try:
-            comparison = st.session_state.rt_evaluator.get_processing_comparison()
-            
-            if comparison:
-                # Create performance comparison charts
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Processing time comparison
-                    methods = list(comparison['total_time'].keys())
-                    times = list(comparison['total_time'].values())
-                    
-                    fig_time = go.Figure(data=[
-                        go.Bar(x=methods, y=times, name="Processing Time",
-                              marker_color=['#FF6B6B', '#4ECDC4'])
-                    ])
-                    fig_time.update_layout(
-                        title="Processing Time Comparison (seconds)",
-                        xaxis_title="Chunking Method",
-                        yaxis_title="Time (seconds)"
-                    )
-                    st.plotly_chart(fig_time, use_container_width=True)
-                
-                with col2:
-                    # Chunks created comparison
-                    chunks_counts = list(comparison['chunks_created'].values())
-                    
-                    fig_chunks = go.Figure(data=[
-                        go.Bar(x=methods, y=chunks_counts, name="Chunks Created",
-                              marker_color=['#FFE66D', '#A8E6CF'])
-                    ])
-                    fig_chunks.update_layout(
-                        title="Chunks Created Comparison",
-                        xaxis_title="Chunking Method",
-                        yaxis_title="Number of Chunks"
-                    )
-                    st.plotly_chart(fig_chunks, use_container_width=True)
-                
-                # Processing speed comparison
-                speeds = list(comparison['processing_speed'].values())
-                fig_speed = go.Figure(data=[
-                    go.Bar(x=methods, y=speeds, name="Processing Speed",
-                          marker_color=['#95E1D3', '#F3D250'])
-                ])
-                fig_speed.update_layout(
-                    title="Processing Speed (chunks/second)",
-                    xaxis_title="Chunking Method",
-                    yaxis_title="Chunks per Second"
-                )
-                st.plotly_chart(fig_speed, use_container_width=True)
-                
-                # Detailed comparison table
-                st.subheader("📋 Processing Statistics")
-                stats_df = pd.DataFrame(st.session_state.rt_evaluator.processing_stats).T
-                st.dataframe(stats_df, use_container_width=True)
-        
-        except Exception as e:
-            st.error(f"❌ Error in analytics: {str(e)}")
-            
-    elif len(st.session_state.processed_methods) == 1:
-        st.info("📊 Process documents with both chunking methods to see comparative analytics")
-        
-        try:
-            # Show single method stats
-            method = st.session_state.processed_methods[0]
-            stats = st.session_state.rt_evaluator.processing_stats[method]
-            
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Processing Time", f"{stats['total_time']:.2f}s")
-            col2.metric("Chunks Created", stats['chunks_created'])
-            col3.metric("Avg Chunk Length", f"{stats['avg_chunk_length']:.0f}")
-            col4.metric("Processing Speed", f"{stats['processing_speed']:.1f} chunks/s")
-        
-        except Exception as e:
-            st.error(f"❌ Error displaying stats: {str(e)}")
-        
     else:
-        st.info("👆 Please process documents to see performance analytics")
-    
-    # System monitoring section
-    st.subheader("🖥️ System Status")
-    col_sys1, col_sys2, col_sys3 = st.columns(3)
-    
-    try:
-        with col_sys1:
-            st.metric("Active Methods", len(st.session_state.processed_methods))
-        
-        with col_sys2:
-            total_chunks = sum(
-                len(st.session_state.rt_evaluator.chunks_data.get(method, []))
-                for method in st.session_state.processed_methods
-            )
-            st.metric("Total Chunks", total_chunks)
-        
-        with col_sys3:
-            total_vectors = sum(
-                st.session_state.rt_evaluator.vector_stores[method].ntotal
-                for method in st.session_state.processed_methods
-                if method in st.session_state.rt_evaluator.vector_stores
-            )
-            st.metric("Vectors Indexed", total_vectors)
-    
-    except Exception as e:
-        st.warning(f"System monitoring partially unavailable: {str(e)}")
-    
-    # Reset system button
-    if st.button("🔄 Reset All Data", type="secondary"):
-        try:
-            from utils import RealTimeRAGEvaluator
-            st.session_state.rt_evaluator = RealTimeRAGEvaluator()
-            st.session_state.processed_methods = []
-            st.session_state.current_document = ""
-            st.session_state.document_type = "generic"
-            st.success("✅ System reset complete!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"❌ Reset failed: {str(e)}")
+        st.info("📊 System analytics will be available after processing documents in the 'System Setup' tab.")
 
-# Enhanced Sidebar
-st.sidebar.header("⚡ Enhanced RAG System")
-st.sidebar.markdown("""
-**🚀 Optimized Features:**
-- 📄 Smart document type detection
-- ⏱️ Enhanced chunking algorithms
-- 📊 Improved F1-score calculation
-- 🔍 Optimized vector search
-- 🤖 Better response generation
-- 📈 Advanced analytics
-
-**🎯 Performance Improvements:**
-- Document-aware reference answers
-- Enhanced text preprocessing
-- Better sentence boundary detection
-- Optimized chunk quality control
-- Advanced similarity scoring
-
-**How to Use:**
-1. Upload or paste your document
-2. System auto-detects document type
-3. Process with both chunking methods
-4. Run enhanced F1-score evaluation
-5. Compare optimized performance metrics
+# Sidebar information
+st.sidebar.markdown("## 🌍 Project Information")
+st.sidebar.info("""
+**Capstone Project Specifications:**
+- **Student**: Shakeel Rifath
+- **Topic**: Environmental Impact Report RAG
+- **Documents**: 10 comprehensive reports (5-10 pages each)
+- **Chunking Method**: Paragraph-based
+- **Embedding Model**: BGE-base-en-v1.5 (Hugging Face)
+- **Vector Database**: Qdrant (Cosine Similarity)
+- **Prompting Technique**: Few-shot, answer-first
+- **Evaluation Metrics**: F1-Score + Performance Analytics
 """)
 
-try:
-    if st.session_state.processed_methods:
-        st.sidebar.success(f"✅ {len(st.session_state.processed_methods)} method(s) processed")
-        for method in st.session_state.processed_methods:
-            chunks_count = len(st.session_state.rt_evaluator.chunks_data.get(method, []))
-            st.sidebar.write(f"• {method}: {chunks_count} chunks")
+st.sidebar.markdown("## 🚀 System Status")
+if hasattr(env_rag, 'documents') and env_rag.documents:
+    st.sidebar.success("✅ System Initialized")
+    st.sidebar.metric("📁 Documents Loaded", len(env_rag.documents))
+    if env_rag.chunks:
+        st.sidebar.metric("📝 Chunks Available", len(env_rag.chunks))
+else:
+    st.sidebar.warning("⚠️ System not initialized")
+    st.sidebar.info("Go to 'System Setup' tab to initialize")
 
-    if st.session_state.current_document:
-        doc_type = getattr(st.session_state, 'document_type', 'generic')
-        st.sidebar.info(f"📄 Document: {len(st.session_state.current_document)} chars")
-        st.sidebar.info(f"🎯 Type: {doc_type.replace('_', ' ').title()}")
-        
-except Exception as e:
-    st.sidebar.warning("Sidebar status partially unavailable")
+# Technical specifications
+st.sidebar.markdown("## 🔧 Technical Specifications")
+st.sidebar.code("""
+Embedding Dimension: 768
+Vector Distance: Cosine
+Chunk Strategy: Paragraph
+Model: BGE-base-en-v1.5
+Database: Qdrant (In-Memory)
+""")
