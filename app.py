@@ -448,7 +448,7 @@ try:
             st.sidebar.write(f"• {method}: {chunks_count} chunks")
 
     if st.session_state.current_document:
-        st.sidebar.info(f"📄 Document loaded: {len(st.session_state.current_document)} characters")
+        st.sidebar.info(f"📄 Document loaded-: {len(st.session_state.current_document)} characters")
         
 except Exception as e:
     st.sidebar.warning("Sidebar status partially unavailable.")
